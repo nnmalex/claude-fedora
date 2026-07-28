@@ -1,0 +1,11 @@
+# Built packages
+*.rpm
+*.srpm
+
+# rpmbuild working tree
+rpmbuild/
+BUILD/
+BUILDROOT/
+RPMS/
+SRPMS/
+SOURCES/
