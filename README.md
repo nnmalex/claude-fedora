@@ -8,8 +8,10 @@ yet](https://code.claude.com/docs/en/desktop-linux). These scripts fetch the
 newest official package, verify it against Anthropic's signing key, and rebuild
 it as a proper RPM with Fedora-native dependencies.
 
-The binaries are unmodified — the application payload in the RPM is
-byte-identical to what Anthropic publishes. Only the packaging metadata changes.
+The binaries are unmodified. The only edit to the application payload is a
+[one-line fix to Quick Entry](#the-quick-entry-fix), which cannot open at all on
+a Wayland session as shipped; everything else is byte-identical to what
+Anthropic publishes.
 
 ## Quick start
 
@@ -30,6 +32,7 @@ Then launch **Claude** from your application menu, or run `claude-desktop`.
 | `update-claude-desktop.sh` | Check for updates, build, install. The one you run. |
 | `build-claude-desktop-rpm.sh` | Download + verify + build the RPM. No root needed. |
 | `claude-desktop.spec` | The RPM spec. |
+| `patch-quick-entry-wayland.py` | The Quick Entry fix. Applied to `app.asar` during `%prep`. |
 
 ## Requirements
 
@@ -119,6 +122,29 @@ specific or actively wrong to carry onto Fedora:
 - The Debian `copyright` file moves to `/usr/share/licenses/`, and the
   `lintian` overrides are removed.
 
+### The Quick Entry fix
+
+Quick Entry never opens on a native Wayland session — not from the
+`Ctrl+Alt+Space` hotkey, not from the tray's *Open Quick Entry*. This is not
+Fedora-specific, and it is not the hotkey: the GlobalShortcuts portal delivers
+the accelerator, the overlay window gets created, and its page finishes
+loading. What fails is the last step. The overlay is a `BrowserWindow` created
+with `show: false`, and the app awaits its `ready-to-show` before calling
+`show()` — but Ozone/Wayland does not emit that event for a window that has
+never been mapped, so the await never settles. On X11 it arrives in about
+150 ms and everything works.
+
+`patch-quick-entry-wayland.py` races that await against a one-second timer, so
+the overlay is shown even when the event does not arrive. The first `show()` is
+what makes `ready-to-show` fire, so at most one activation per session can
+reach the timeout, and on X11 the race still settles early exactly as before.
+
+The edit is applied to `app.asar` in place and padded to the exact length of the
+code it replaces, so every offset in the asar header stays valid and only the
+affected file's integrity hashes need rewriting. It is anchored on a log message
+inside the await; if upstream reworks that code the pattern stops matching and
+the build fails, rather than quietly producing an unpatched package.
+
 ## Caveats
 
 - **Claude Desktop for Linux is beta**, and Fedora is not a tested target;
@@ -126,9 +152,13 @@ specific or actively wrong to carry onto Fedora:
   supported path — don't report Fedora-specific bugs to Anthropic as if they
   shipped this.
 - **No automatic updates.** See [Updating](#updating).
-- Not everything is in the Linux build yet: Computer Use, dictation, and the
-  Quick Entry global hotkey on native Wayland are unavailable regardless of
-  distribution.
+- Not everything is in the Linux build yet: Computer Use and dictation are
+  unavailable regardless of distribution.
+- Wayland does not let a client place its own windows, so the Quick Entry
+  overlay appears wherever the compositor puts it and the remembered position
+  is ignored. Under XWayland (`--ozone-platform=x11`) the position is honoured,
+  but the global hotkey stops working, since that path uses X11 key grabs
+  instead of the portal.
 
 ## Troubleshooting
 

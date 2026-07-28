@@ -23,7 +23,9 @@ KEY_URL="https://downloads.claude.ai/claude-desktop/key.asc"
 # Published at https://code.claude.com/docs/en/desktop-linux
 KEY_FPR="31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE"
 
-SPEC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/claude-desktop.spec"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SPEC="$HERE/claude-desktop.spec"
+PATCH="$HERE/patch-quick-entry-wayland.py"
 
 case "$(uname -m)" in
     aarch64) DEBARCH=arm64 ;;
@@ -146,6 +148,9 @@ mkdir -p "$top"/{BUILD,RPMS,SRPMS,BUILDROOT}
 # Match the spec's Version to whatever the repository is serving today.
 spec="$WORK/claude-desktop.spec"
 sed -E "s/^Version:([[:space:]]+).*/Version:\\1$VERSION/" "$SPEC" > "$spec"
+
+# _sourcedir is WORK (see below), so Source1 has to sit next to the .deb.
+cp "$PATCH" "$WORK/"
 
 declare -a defines=(
     --define "_topdir $top"
