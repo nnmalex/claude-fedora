@@ -191,6 +191,70 @@ To use a different colour, change `BRAND` at the top of the script and rebuild.
 
 ## Troubleshooting
 
+**The hotkey does nothing, but the tray's *Open Quick Entry* still works.** This
+is not the [Quick Entry fix](#the-quick-entry-fix) failing — the tray and the
+hotkey both end up in the same `activateQuickEntryWindow()`, so if the tray opens
+the overlay, that patch is doing its job. What has broken is the delivery of the
+accelerator, one step earlier.
+
+On Wayland the app registers its hotkey through the XDG GlobalShortcuts portal,
+and a portal shortcut is identified by a string that **embeds the accelerator**:
+`<sha256-prefix>-<accelerator>`. Change the shortcut in Claude's settings and the
+app starts listening for a different id. Plasma records the new one with the
+app's requested key as its *default* but leaves the **active key unset**, while
+the old id keeps the key it was given. So the old combo now fires an id the
+running app no longer recognises — Chromium looks it up, misses, and drops it
+without a word — and the new combo is bound to nothing at all. The tray never
+touches the portal, which is why it is unaffected.
+
+Compare what the app asks for against what Plasma actually bound:
+
+```bash
+grep globalShortcut ~/.config/Claude/claude_desktop_config.json
+sed -n '/\[com.anthropic.Claude\]/,/^$/p' ~/.config/kglobalshortcutsrc
+```
+
+Each line there is `<id>=<active key>,<default key>,<description>`, so a first
+field of `none` is a shortcut with no key on it:
+
+```
+CA1B01B5C4F12FED440685345401DB64-Ctrl+Alt+Space=Ctrl+Alt+Space,Ctrl+Alt+Space,…
+F14ACB74662AADFE07F531C0980CD689-Ctrl+Space=none,Ctrl+Space,…
+```
+
+That is the broken state: the app is configured for `Ctrl+Space` and listening
+for the second id, which has no key, while the first id — a leftover from the
+previous setting — still holds `Ctrl+Alt+Space`.
+
+Fix it in **System Settings → Keyboard → Shortcuts → Claude**: give the entry
+whose name ends in your configured accelerator the key you want, and clear the
+stale one so it stops swallowing its combo system-wide. It takes effect
+immediately; no restart. Scripted, the same thing is:
+
+```bash
+busctl --user call org.kde.kglobalaccel /kglobalaccel org.kde.KGlobalAccel \
+    setForeignShortcut asai 4 "com.anthropic.Claude" \
+    "F14ACB74662AADFE07F531C0980CD689-Ctrl+Space" "Claude" "Claude shortcut: Ctrl+Space" \
+    1 67108896
+```
+
+— where the trailing integer is Qt's encoding of the key sequence
+(`Ctrl` = `0x04000000` plus `Qt::Key_Space` = `0x20`), and `0` clears it.
+
+Expect to repeat this every time you change the shortcut in Claude's settings:
+each new accelerator mints a new portal id, and each new id starts unbound.
+
+**The hotkey is dead right after login, then starts working later.** Registration
+of the portal shortcut is deferred until the main window emits `focus`, so a
+launch where the window never takes focus registers nothing — the portal session
+is simply never created. Clicking the Claude window once is enough. You can
+confirm which state you are in with:
+
+```bash
+busctl --user call org.kde.kglobalaccel /component/com_anthropic_Claude \
+    org.kde.kglobalaccel.Component isActive
+```
+
 **Building without installing `rpm-build`.** The build script honours a
 `LOCAL_ROOT` environment variable pointing at an extracted (not installed)
 `rpm-build` tree, for machines where you would rather not add build tooling:
