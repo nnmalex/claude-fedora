@@ -25,7 +25,8 @@ KEY_FPR="31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE"
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SPEC="$HERE/claude-desktop.spec"
-PATCH="$HERE/patch-quick-entry-wayland.py"
+# Everything the spec pulls in as SourceN besides the .deb itself.
+SOURCES=("$HERE/patch-quick-entry-wayland.py" "$HERE/recolor-tray-icon.py")
 
 case "$(uname -m)" in
     aarch64) DEBARCH=arm64 ;;
@@ -149,8 +150,8 @@ mkdir -p "$top"/{BUILD,RPMS,SRPMS,BUILDROOT}
 spec="$WORK/claude-desktop.spec"
 sed -E "s/^Version:([[:space:]]+).*/Version:\\1$VERSION/" "$SPEC" > "$spec"
 
-# _sourcedir is WORK (see below), so Source1 has to sit next to the .deb.
-cp "$PATCH" "$WORK/"
+# _sourcedir is WORK (see below), so the scripts have to sit next to the .deb.
+cp "${SOURCES[@]}" "$WORK/"
 
 declare -a defines=(
     --define "_topdir $top"

@@ -8,10 +8,11 @@ yet](https://code.claude.com/docs/en/desktop-linux). These scripts fetch the
 newest official package, verify it against Anthropic's signing key, and rebuild
 it as a proper RPM with Fedora-native dependencies.
 
-The binaries are unmodified. The only edit to the application payload is a
+The binaries are unmodified. Two things in the application payload are edited: a
 [one-line fix to Quick Entry](#the-quick-entry-fix), which cannot open at all on
-a Wayland session as shipped; everything else is byte-identical to what
-Anthropic publishes.
+a Wayland session as shipped, and [the tray icon's
+colour](#the-tray-icon-tint), which is otherwise a black silhouette on a dark
+panel. Everything else is byte-identical to what Anthropic publishes.
 
 ## Quick start
 
@@ -33,6 +34,7 @@ Then launch **Claude** from your application menu, or run `claude-desktop`.
 | `build-claude-desktop-rpm.sh` | Download + verify + build the RPM. No root needed. |
 | `claude-desktop.spec` | The RPM spec. |
 | `patch-quick-entry-wayland.py` | The Quick Entry fix. Applied to `app.asar` during `%prep`. |
+| `recolor-tray-icon.py` | The tray icon tint. Applied to the tray PNGs during `%prep`. |
 
 ## Requirements
 
@@ -144,6 +146,33 @@ code it replaces, so every offset in the asar header stays valid and only the
 affected file's integrity hashes need rewriting. It is anchored on a log message
 inside the await; if upstream reworks that code the pattern stops matching and
 the build fails, rather than quietly producing an unpatched package.
+
+### The tray icon tint
+
+The Linux tray icon ships as two flat silhouettes — `TrayIconLinux.png` is solid
+black, `TrayIconLinux-Dark.png` is solid white — with the shape carried entirely
+by the alpha channel. The app chooses between them like this:
+
+```js
+Mme() === "gnome" || nativeTheme.shouldUseDarkColors
+    ? "TrayIconLinux-Dark.png"
+    : "TrayIconLinux.png"
+```
+
+Outside GNOME that follows the *application* colour scheme, which is not what
+decides the panel's background. Plasma's panel is dark even under a light Breeze
+theme, so the light-theme branch paints the black silhouette onto a near-black
+panel and the tray entry becomes a black smudge.
+
+`recolor-tray-icon.py` repaints both files in Claude's orange (`#D97757`), which
+reads against a light panel and a dark one alike, so it no longer matters which
+branch is taken or how the theme is detected. Only the RGB channels are
+rewritten — every alpha value is copied through unchanged, so the anti-aliased
+edges are exactly as drawn. An image that is not the flat black or white
+silhouette the script expects is refused, so an upstream redesign fails the
+build instead of being silently repainted.
+
+To use a different colour, change `BRAND` at the top of the script and rebuild.
 
 ## Caveats
 

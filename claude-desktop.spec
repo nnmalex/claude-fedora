@@ -33,6 +33,7 @@ License:        LicenseRef-Anthropic-Proprietary AND MIT AND BSD-3-Clause
 URL:            https://claude.ai
 Source0:        claude-desktop_%{version}_%{debarch}.deb
 Source1:        patch-quick-entry-wayland.py
+Source2:        recolor-tray-icon.py
 
 # Upstream publishes amd64 and arm64 only. The RPM's architecture follows the
 # build host, so each arch must be built natively -- there is no cross path.
@@ -78,9 +79,10 @@ parallel sessions, visual diff review, an integrated terminal and editor, and
 live app preview.
 
 This package is repackaged from Anthropic's official Debian package for
-%{debarch}, with one fix applied so that Quick Entry opens on native Wayland.
-Because it does not come from Anthropic's apt repository, it does not update
-itself -- rebuild from a newer .deb to upgrade.
+%{debarch}, with two fixes applied: Quick Entry opens on native Wayland, and the
+tray icon is tinted so it stays legible on a dark panel. Because it does not
+come from Anthropic's apt repository, it does not update itself -- rebuild from
+a newer .deb to upgrade.
 
 %prep
 %setup -q -c -T
@@ -92,6 +94,13 @@ tar -xf data.tar.xz
 # only delivers once the window is mapped. See the script for the details; it
 # aborts the build rather than patch anything it does not recognise.
 python3 %{SOURCE1} usr/lib/claude-desktop/resources/app.asar
+
+# The Linux tray icon ships as a flat black silhouette and a flat white one,
+# chosen by the application colour scheme rather than the panel's. On Plasma
+# that lands a black icon on a dark panel. Tinting both with Claude's orange
+# makes the choice moot; only the RGB channels change.
+python3 %{SOURCE2} usr/lib/claude-desktop/resources/TrayIconLinux.png \
+                   usr/lib/claude-desktop/resources/TrayIconLinux-Dark.png
 
 %install
 cp -a usr %{buildroot}/
@@ -124,3 +133,5 @@ chmod 4755 %{buildroot}%{appdir}/chrome-sandbox
 - Suppress Provides for the bundled Electron/Chromium libraries
 - Bound Quick Entry's wait on 'ready-to-show', which Ozone/Wayland never
   delivers for an unmapped window, so the overlay opens on a Wayland session
+- Tint the Linux tray icons with Claude's brand orange, so the tray entry is
+  legible whichever of the two monochrome silhouettes the app selects
