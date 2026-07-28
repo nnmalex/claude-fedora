@@ -64,15 +64,33 @@ if [[ "$installed" == "$latest" && $FORCE -eq 0 ]]; then
 fi
 
 # --- make sure we can build ---------------------------------------------------
-# The build needs rpm-build; we are about to ask for sudo anyway, so offer to
-# install it rather than failing. LOCAL_ROOT users are already sorted.
-if [[ -z "${LOCAL_ROOT:-}" ]] && ! command -v rpmbuild >/dev/null 2>&1; then
-    if [[ $INSTALL -eq 0 ]]; then
-        echo "rpmbuild not found -- install rpm-build, or set LOCAL_ROOT" >&2
-        exit 1
+# The build needs these tools (see build-claude-desktop-rpm.sh's header and
+# claude-desktop.spec's BuildRequires); we are about to ask for sudo anyway, so
+# offer to install whatever is missing rather than failing partway through a
+# build. LOCAL_ROOT users are already sorted.
+if [[ -z "${LOCAL_ROOT:-}" ]]; then
+    declare -A need_pkg=(
+        [rpmbuild]=rpm-build
+        [ar]=binutils
+        [curl]=curl
+        [gpg]=gnupg2
+        [python3]=python3
+        [tar]=tar
+        [xz]=xz
+    )
+    missing=()
+    for cmd in "${!need_pkg[@]}"; do
+        command -v "$cmd" >/dev/null 2>&1 || missing+=("${need_pkg[$cmd]}")
+    done
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        mapfile -t missing < <(printf '%s\n' "${missing[@]}" | sort -u)
+        if [[ $INSTALL -eq 0 ]]; then
+            echo "missing build tools (${missing[*]}) -- install them, or set LOCAL_ROOT" >&2
+            exit 1
+        fi
+        echo "==> installing missing build tools: ${missing[*]}"
+        sudo dnf install -y "${missing[@]}"
     fi
-    echo "==> rpmbuild not found; installing rpm-build"
-    sudo dnf install -y rpm-build binutils
 fi
 
 # --- build (or reuse) ---------------------------------------------------------
